@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   // Tillåt anrop från din domän (byt ut mot din riktiga domän)
-  res.setHeader('Access-Control-Allow-Origin', 'https://dindomän.se');
+  res.setHeader('Access-Control-Allow-Origin', 'https://stockholmsparkering.se');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
