@@ -68,3 +68,5 @@ Håll svaren under 4–5 meningar. Var konkret och ge specifika tips.`,
     res.status(500).json({ error: 'Internt serverfel' });
   }
 }
+
+
