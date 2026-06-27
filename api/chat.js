@@ -11,34 +11,59 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Ogiltig förfrågan' });
   }
 
+  const lastUserMessage = [...messages]
+    .reverse()
+    .find(m => m.role === 'user')?.content?.toLowerCase() || '';
+
   // ----------------------------------------------------------------
-  // Källor och nyckelord som triggar dem
-  // maxChars styr hur mycket text som skickas till Claude per källa
+  // Hämta realtidsdata från Stockholm Parkerings API
+  // Triggas när frågan handlar om parkeringshus eller lediga platser
+  // ----------------------------------------------------------------
+  const GARAGE_KEYWORDS = [
+    'parkeringshus', 'garage', 'p-hus', 'stockholmparkering',
+    'ledig', 'lediga', 'platser', 'inomhus', 'hitta parkering'
+  ];
+
+  let garageContext = '';
+  if (GARAGE_KEYWORDS.some(kw => lastUserMessage.includes(kw))) {
+    try {
+      const apiRes = await fetch(
+        'https://api.stockholmparkering.se:8084/SparkInfartsParkeringService.svc/GetAllAnlaggningParkeringsInfo',
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const data = await apiRes.json();
+      const anlaggningar = data?.AnlaggningParkeringsInfoResult || data || [];
+
+      // Formatera till kompakt text för Claude
+      const sammanfattning = anlaggningar
+        .slice(0, 40) // Max 40 anläggningar för att hålla nere tokens
+        .map(a => {
+          const namn = a.Namn || a.Name || 'Okänd';
+          const adress = a.Adress || a.Address || '';
+          const lediga = a.AntalLedigaPlatser ?? a.FreeSpaces ?? '?';
+          const totalt = a.AntalBesoksParkeringsplatser ?? a.TotalSpaces ?? '?';
+          const taxa = a.Besokstaxa || a.Taxa || '';
+          return `${namn} (${adress}): ${lediga}/${totalt} lediga platser. Taxa: ${taxa}`;
+        })
+        .join('\n');
+
+      garageContext = `--- Stockholm Parkering — realtidsdata (${new Date().toLocaleTimeString('sv-SE')}) ---
+${sammanfattning}`;
+    } catch (err) {
+      console.error('Kunde inte hämta Stockholm Parkering API:', err.message);
+      garageContext = '--- Stockholm Parkering API kunde inte nås just nu ---';
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Övriga webbkällor med selektiv RAG
   // ----------------------------------------------------------------
   const SOURCES = [
     {
       name: 'Stockholms stad — taxeområden och avgifter',
       url: 'https://parkering.stockholm/betala-parkering/taxeomraden-avgifter/',
       keywords: ['taxa', 'taxe', 'avgift', 'pris', 'kostar', 'kosta', 'betala', 'zon', 'gatuparkering', 'hur mycket', 'timme', 'kr/h'],
-      maxChars: 6000, // Högre gräns — taxorna ligger långt ner på sidan
-    },
-    {
-      name: 'Stockholm Parkering — parkeringshus',
-      url: 'https://www.stockholmparkering.se/hitta-parkering/',
-      keywords: ['stockholmparkering', 'parkeringshus', 'garage', 'inomhus', 'p-hus'],
-      maxChars: 2000,
-    },
-    {
-      name: 'Q-Park Stockholm',
-      url: 'https://www.qpark.se/hitta-parkering/stockholm/',
-      keywords: ['qpark', 'q-park', 'garage', 'parkeringshus'],
-      maxChars: 2000,
-    },
-    {
-      name: 'Apcoa Stockholm',
-      url: 'https://www.apcoa.se/parkering-i/stockholm/',
-      keywords: ['apcoa', 'garage', 'parkeringshus'],
-      maxChars: 2000,
+      maxChars: 6000,
     },
     {
       name: 'SL — P+R-platser',
@@ -61,13 +86,13 @@ export default async function handler(req, res) {
     {
       name: 'Polisen — bestrida parkeringsanmärkning',
       url: 'https://polisen.se/lagar-och-regler/boter/parkeringsanmarkning/',
-      keywords: ['bestrida', 'överklaga', 'anmärkning', 'p-bot', 'parkeringsbot', 'felpark', 'felparkering', 'betalningsansvar', 'polis'],
+      keywords: ['bestrida', 'överklaga', 'anmärkning', 'p-bot', 'parkeringsbot', 'felpark', 'felparkering', 'polis'],
       maxChars: 2000,
     },
     {
       name: 'Transportstyrelsen — felparkeringsavgift',
       url: 'https://www.transportstyrelsen.se/sv/vagtrafik/fordon/skatter-och-avgifter/parkeringsanmarkning/',
-      keywords: ['transportstyrelsen', 'betala bot', 'obetald', 'kronofogden', 'indrivning', 'erinran', 'felparkeringsavgift'],
+      keywords: ['transportstyrelsen', 'betala bot', 'obetald', 'kronofogden', 'indrivning', 'felparkeringsavgift'],
       maxChars: 2000,
     },
     {
@@ -90,28 +115,14 @@ export default async function handler(req, res) {
     },
   ];
 
-  // ----------------------------------------------------------------
-  // Avgör relevanta källor baserat på senaste frågan
-  // ----------------------------------------------------------------
-  const lastUserMessage = [...messages]
-    .reverse()
-    .find(m => m.role === 'user')?.content?.toLowerCase() || '';
-
   const relevantSources = SOURCES.filter(source =>
     source.keywords.some(kw => lastUserMessage.includes(kw))
   );
 
-  // Alltid inkludera taxekällan som bas om inga specifika träffar
-  if (relevantSources.length === 0) {
-    relevantSources.push(SOURCES[0]);
+  if (relevantSources.length === 0 && !garageContext) {
+    relevantSources.push(SOURCES[0]); // Taxa som fallback
   }
 
-  // Max 4 källor per anrop
-  const sourcesToFetch = relevantSources.slice(0, 4);
-
-  // ----------------------------------------------------------------
-  // Hämta och rensa HTML från valda källor parallellt
-  // ----------------------------------------------------------------
   async function fetchSource(source) {
     try {
       const response = await fetch(source.url, {
@@ -133,11 +144,14 @@ export default async function handler(req, res) {
     }
   }
 
-  const fetchedSources = await Promise.all(sourcesToFetch.map(fetchSource));
+  const fetchedSources = await Promise.all(
+    relevantSources.slice(0, 4).map(fetchSource)
+  );
 
-  const sourceContext = fetchedSources
-    .map(s => `--- ${s.name}\n${s.url}\n${s.text}`)
-    .join('\n\n');
+  const sourceContext = [
+    garageContext,
+    ...fetchedSources.map(s => `--- ${s.name}\n${s.url}\n${s.text}`)
+  ].filter(Boolean).join('\n\n');
 
   // ----------------------------------------------------------------
   // Skicka till Claude
@@ -156,9 +170,9 @@ export default async function handler(req, res) {
         system: `Du är en hjälpsam parkeringsexpert för Stockholm. Du svarar kortfattat
 och praktiskt på svenska.
 
-Nedan följer aktuell information hämtad direkt från relevanta webbplatser.
+Nedan följer aktuell information hämtad direkt från relevanta källor.
 Prioritera denna information framför din egen kunskap om priser och regler.
-Hänvisa gärna till källan när det är relevant.
+Lediga platser från Stockholm Parkerings API är realtidsdata — lyft gärna fram det.
 
 ${sourceContext}
 
