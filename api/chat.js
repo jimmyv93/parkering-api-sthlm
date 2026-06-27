@@ -1,3 +1,26 @@
+// Cache för Stockholm Parkering API — uppdateras max en gång var 5:e minut
+let cache = { data: null, timestamp: 0 };
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function getGarageData() {
+  const now = Date.now();
+  if (cache.data && now - cache.timestamp < CACHE_TTL) {
+    return cache.data;
+  }
+  try {
+    const res = await fetch(
+      'https://api.stockholmparkering.se:8084/SparkInfartsParkeringService.svc/GetAllAnlaggningParkeringsInfo',
+      { signal: AbortSignal.timeout(15000) }
+    );
+    const data = await res.json();
+    cache = { data, timestamp: now };
+    return data;
+  } catch (err) {
+    console.error('Garage API timeout:', err.message);
+    return cache.data || null; // Returnera gammal cache om ny hämtning misslyckas
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://stockholmsparkering.se');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,7 +39,7 @@ export default async function handler(req, res) {
     .find(m => m.role === 'user')?.content?.toLowerCase() || '';
 
   // ----------------------------------------------------------------
-  // Stockholm Parkering API — realtidsdata
+  // Stockholm Parkering API — med cache
   // ----------------------------------------------------------------
   const GARAGE_KEYWORDS = [
     'parkeringshus', 'garage', 'p-hus', 'stockholmparkering',
@@ -26,14 +49,14 @@ export default async function handler(req, res) {
 
   let garageContext = '';
   if (GARAGE_KEYWORDS.some(kw => lastUserMessage.includes(kw))) {
-    try {
-      const apiRes = await fetch(
-        'https://api.stockholmparkering.se:8084/SparkInfartsParkeringService.svc/GetAllAnlaggningParkeringsInfo',
-        { signal: AbortSignal.timeout(5000) }
-      );
-      const anlaggningar = await apiRes.json();
+    // Starta hämtning men vänta max 2 sekunder — om cache finns används den direkt
+    const garageData = await Promise.race([
+      getGarageData(),
+      new Promise(resolve => setTimeout(() => resolve(cache.data), 2000))
+    ]);
 
-      const sammanfattning = anlaggningar
+    if (garageData && garageData.length > 0) {
+      const sammanfattning = garageData
         .slice(0, 50)
         .map(a => {
           const namn = a.Namn || a.Adress || 'Okänd';
@@ -42,8 +65,6 @@ export default async function handler(req, res) {
           const platser = a.AntalBesokPlatser ?? '?';
           const laddplatser = a.AntalLaddplatserBesokBil ?? 0;
           const rörelsehindrad = a.AntalBesokPlatserRorelsehindrad ?? 0;
-
-          // Plocka ut taxebeskrivning om den finns
           const taxa = a.BesokstaxaCollection?.[0]?.Anm || '';
 
           let rad = `${namn} (${adress}) — ${typ}: ${platser} platser`;
@@ -54,11 +75,9 @@ export default async function handler(req, res) {
         })
         .join('\n');
 
-      garageContext = `--- Stockholm Parkering — realtidsdata (${new Date().toLocaleTimeString('sv-SE')}) ---
+      const cacheAge = Math.round((Date.now() - cache.timestamp) / 1000 / 60);
+      garageContext = `--- Stockholm Parkering — data (uppdaterad för ${cacheAge} min sedan) ---
 ${sammanfattning}`;
-    } catch (err) {
-      console.error('Stockholm Parkering API-fel:', err.message);
-      garageContext = '';
     }
   }
 
@@ -179,8 +198,8 @@ och praktiskt på svenska.
 
 Nedan följer aktuell information hämtad direkt från relevanta källor.
 Prioritera denna information framför din egen kunskap om priser och regler.
-När du har realtidsdata från Stockholm Parkerings API, lyft gärna fram antal
-platser och taxainformation från den.
+När du har data från Stockholm Parkerings API, använd den för att ge konkreta svar
+om antal platser, laddplatser och taxor på specifika anläggningar.
 
 ${sourceContext}
 
