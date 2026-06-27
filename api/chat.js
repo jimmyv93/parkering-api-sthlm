@@ -162,7 +162,9 @@ ${sourceContext}
 Viktigt: Du är inte juridisk rådgivare. Vid tvister om avgifter, hänvisa alltid
 till Polisen, Transportstyrelsen eller Konsumentverket för officiell vägledning.
 
-Håll svaren under 4–5 meningar. Var konkret och ge specifika tips.`,
+Håll svaren under 4–5 meningar. Var konkret och ge specifika tips.
+Formatera ALDRIG med markdown — använd inga stjärnor, inga punktlistor och inga
+rubriker. Skriv enkel löptext med blanka rader mellan stycken om du delar upp svaret.`,
         messages,
       }),
     });
