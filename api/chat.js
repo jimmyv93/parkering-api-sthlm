@@ -16,12 +16,12 @@ export default async function handler(req, res) {
     .find(m => m.role === 'user')?.content?.toLowerCase() || '';
 
   // ----------------------------------------------------------------
-  // Hämta realtidsdata från Stockholm Parkerings API
-  // Triggas när frågan handlar om parkeringshus eller lediga platser
+  // Stockholm Parkering API — realtidsdata
   // ----------------------------------------------------------------
   const GARAGE_KEYWORDS = [
     'parkeringshus', 'garage', 'p-hus', 'stockholmparkering',
-    'ledig', 'lediga', 'platser', 'inomhus', 'hitta parkering'
+    'ledig', 'lediga', 'platser', 'inomhus', 'hitta parkering',
+    'ytparkering', 'laddplats', 'handikapp', 'rörelsehindrad'
   ];
 
   let garageContext = '';
@@ -31,27 +31,34 @@ export default async function handler(req, res) {
         'https://api.stockholmparkering.se:8084/SparkInfartsParkeringService.svc/GetAllAnlaggningParkeringsInfo',
         { signal: AbortSignal.timeout(5000) }
       );
-      const data = await apiRes.json();
-      const anlaggningar = data?.AnlaggningParkeringsInfoResult || data || [];
+      const anlaggningar = await apiRes.json();
 
-      // Formatera till kompakt text för Claude
       const sammanfattning = anlaggningar
-        .slice(0, 40) // Max 40 anläggningar för att hålla nere tokens
+        .slice(0, 50)
         .map(a => {
-          const namn = a.Namn || a.Name || 'Okänd';
-          const adress = a.Adress || a.Address || '';
-          const lediga = a.AntalLedigaPlatser ?? a.FreeSpaces ?? '?';
-          const totalt = a.AntalBesoksParkeringsplatser ?? a.TotalSpaces ?? '?';
-          const taxa = a.Besokstaxa || a.Taxa || '';
-          return `${namn} (${adress}): ${lediga}/${totalt} lediga platser. Taxa: ${taxa}`;
+          const namn = a.Namn || a.Adress || 'Okänd';
+          const adress = a.Adress || '';
+          const typ = a.Anlaggningstyp || '';
+          const platser = a.AntalBesokPlatser ?? '?';
+          const laddplatser = a.AntalLaddplatserBesokBil ?? 0;
+          const rörelsehindrad = a.AntalBesokPlatserRorelsehindrad ?? 0;
+
+          // Plocka ut taxebeskrivning om den finns
+          const taxa = a.BesokstaxaCollection?.[0]?.Anm || '';
+
+          let rad = `${namn} (${adress}) — ${typ}: ${platser} platser`;
+          if (laddplatser > 0) rad += `, ${laddplatser} laddplatser`;
+          if (rörelsehindrad > 0) rad += `, ${rörelsehindrad} rörelsehindrade`;
+          if (taxa) rad += `. Taxa: ${taxa}`;
+          return rad;
         })
         .join('\n');
 
       garageContext = `--- Stockholm Parkering — realtidsdata (${new Date().toLocaleTimeString('sv-SE')}) ---
 ${sammanfattning}`;
     } catch (err) {
-      console.error('Kunde inte hämta Stockholm Parkering API:', err.message);
-      garageContext = '--- Stockholm Parkering API kunde inte nås just nu ---';
+      console.error('Stockholm Parkering API-fel:', err.message);
+      garageContext = '';
     }
   }
 
@@ -120,7 +127,7 @@ ${sammanfattning}`;
   );
 
   if (relevantSources.length === 0 && !garageContext) {
-    relevantSources.push(SOURCES[0]); // Taxa som fallback
+    relevantSources.push(SOURCES[0]);
   }
 
   async function fetchSource(source) {
@@ -172,7 +179,8 @@ och praktiskt på svenska.
 
 Nedan följer aktuell information hämtad direkt från relevanta källor.
 Prioritera denna information framför din egen kunskap om priser och regler.
-Lediga platser från Stockholm Parkerings API är realtidsdata — lyft gärna fram det.
+När du har realtidsdata från Stockholm Parkerings API, lyft gärna fram antal
+platser och taxainformation från den.
 
 ${sourceContext}
 
