@@ -227,6 +227,8 @@ export default async function handler(req, res) {
 
 Nedan följer aktuell information hämtad från officiella källor. Prioritera denna framför din egen kunskap om priser och regler.
 
+Stockholm Parkerings data innehåller anläggningar med deras kapacitet och taxor — inte realtidsbeläggning. När du får frågor om var man kan parkera i ett område, lista de anläggningar som har besöksplatser (AntalBesokPlatser > 0) och vad de kostar. Säg inte att du saknar realtidsdata — presentera istället konkret vilka platser som finns och hänvisa till EasyPark eller stockholmparkering.se för aktuell tillgänglighet.
+
 ${fullContext}
 
 --- ALLMÄN KUNSKAP ---
