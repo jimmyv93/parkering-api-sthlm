@@ -22,10 +22,13 @@ export default async function handler(req, res) {
     .find(m => m.role === 'user')?.content?.toLowerCase() || '';
 
   const GARAGE_KEYWORDS = [
-    'parkeringshus', 'garage', 'p-hus', 'stockholmparkering',
-    'ledig', 'lediga', 'platser', 'inomhus', 'ytparkering',
-    'laddplats', 'hitta parkering'
-  ];
+  'parkeringshus', 'garage', 'p-hus', 'stockholmparkering',
+  'ledig', 'lediga', 'platser', 'inomhus', 'ytparkering',
+  'laddplats', 'hitta parkering', 'just nu', 'realtid',
+  'johanneshov', 'globen', 'arenastan', 'södermalm',
+  'östermalm', 'vasastan', 'kungsholmen', 'lidingö',
+  'parkera nu', 'var kan jag parkera', 'finns det plats'
+];
 
   const TILLATEN_KEYWORDS = [
     'tillåtet', 'tillåten', 'får man parkera', 'kan man parkera',
