@@ -3,7 +3,7 @@
 // garage-cache-repot. Exempel:
 // https://raw.githubusercontent.com/jimmy/garage-cache/main/data/garagedata.json
 // ----------------------------------------------------------------
-const GARAGE_DATA_URL = 'https://raw.githubusercontent.com/DITT-ANVÄNDARNAMN/garage-cache/main/data/garagedata.json';
+const GARAGE_DATA_URL = 'https://raw.githubusercontent.com/jimmyv93/garage-cache/main/data/garagedata.json';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://stockholmsparkering.se');
