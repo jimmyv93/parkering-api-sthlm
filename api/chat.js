@@ -239,6 +239,7 @@ ${fullContext}
 - Det finns två typer av parkeringsavgifter:
   1. Felparkeringsavgift: på gatumark (kommunal). Betala ALLTID först, bestrida sedan hos Polisen.
   2. Kontrollavgift: på tomtmark (privat). Betala INTE innan du bestridit hos bolaget.
+  3. Vissa besökare kan komma att tro att de hamnat hos Stockholm Parkering (Stockholms Stads Parkerings AB), vilket är Stockholm Kommuns kommunala bolag för parkering på tomtmark. Vid frågor om detta bolag, gör det tydligt att de inte pratar med detta bolag.
 - Betalappar: EasyPark och Parkster (Betala P-appen lades ned september 2024)
 - Nära Avicii Arena/Globen: parkera i Johanneshov eller ta tunnelbana röd linje
 - Djurgården: mycket begränsat, rekommenderas spårvagn 7
